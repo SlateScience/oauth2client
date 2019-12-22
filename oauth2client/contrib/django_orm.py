@@ -11,6 +11,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# This version patched by Matific Inc, 2019.
+#
+
 
 """OAuth 2.0 utilities for Django.
 
@@ -52,12 +56,24 @@ class CredentialsField(models.Field):
             return None
         if isinstance(value, oauth2client.client.Credentials):
             return value
-        return pickle.loads(base64.b64decode(smart_bytes(value)))
+        saved_bytes = base64.b64decode(smart_bytes(value))
+        if six.PY2:
+            return pickle.loads(saved_bytes)
+        else:
+            # Python 3
+            obj = pickle.loads(saved_bytes, encoding="bytes")
+            # Under 'bytes' encoding, ASCII strings (like __dict__ keys) are
+            # unpickled into bytes. But Python wants __dict__ keys to be strings.
+            d = obj.__dict__
+            for k in list(d.keys()):
+                if isinstance(k, bytes):
+                    d[k.decode()] = d.pop(k)
+            return obj
 
     def get_prep_value(self, value):
         if value is None:
             return None
-        return smart_text(base64.b64encode(pickle.dumps(value)))
+        return smart_text(base64.b64encode(pickle.dumps(value, protocol=2)))
 
     def value_to_string(self, obj):
         """Convert the field value from the provided model to a string.
